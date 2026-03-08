@@ -43,7 +43,6 @@ class Signer {
         // Only restore NIP-07 if we stored a pubkey without a secret (i.e. NIP-07 session)
         await this.loginWithNip07();
       } else if (guestSecret) {
-        // Restore guest session from sessionStorage
         await this.loginWithGuestKey(hexToBytes(guestSecret));
       }
     } catch (e) {
@@ -63,7 +62,7 @@ class Signer {
 
     // Store pubkey in localStorage (not the secret — that stays in sessionStorage)
     setKeysInLocalStorage(pubkey);
-    // Store secret in sessionStorage only (wiped when tab closes)
+    // Store secret in localStorage (persists across sessions)
     setGuestSecretInSession(bytesToHex(privkey));
     this.notify();
   }
