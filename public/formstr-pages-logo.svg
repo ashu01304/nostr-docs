@@ -1,0 +1,59 @@
+ 
+<svg width="240" height="220" viewBox="0 0 240 220" fill="none" xmlns="http://www.w3.org/2000/svg">
+
+  <!-- White page (visible) -->
+  <g transform="skewX(-6) translate(10,0)">
+    <rect x="95" y="50" width="70" height="120" rx="6" fill="#FFFFFF"/>
+  </g>
+
+  <!-- Subtle page edge -->
+  <g transform="skewX(-6) translate(10,0)">
+    <rect x="105" y="50" width="6" height="120" fill="#E5E5E5"/>
+  </g>
+
+  <!-- Back cover -->
+  <g transform="rotate(-6 120 110)">
+    <rect x="70" y="50" width="90" height="120" rx="10" fill="#3E2F24"/>
+  </g>
+
+  <!-- Front cover -->
+  <g transform="rotate(-6 120 110)">
+    <rect x="60" y="45" width="90" height="120" rx="10"
+          fill="#4A382C"/>
+  </g>
+
+  <!-- Spine -->
+  <g transform="rotate(-6 120 110)">
+    <rect x="60" y="45" width="6" height="120"
+          fill="#2F231B"/>
+  </g>
+
+  <!-- Top highlight -->
+  <g transform="rotate(-6 120 110)">
+    <rect x="62" y="47" width="86" height="4"
+          fill="#FFFFFF" opacity="0.06"/>
+  </g>
+
+  <!-- Bookmark -->
+  <g transform="rotate(-6 120 110)">
+    <path d="M125 45 
+             L125 90 
+             L115 82 
+             L105 90 
+             L105 45 Z"
+          fill="#A78B6D"/>
+  </g>
+
+  <!-- Engraved "form*" -->
+  <g transform="rotate(-6 120 110)">
+    <text x="95" y="110"
+          font-family="Inter, Arial, sans-serif"
+          font-size="16"
+          font-weight="600"
+          fill="#2A1F18"
+          opacity="0.25">
+      form*
+    </text>
+  </g>
+
+</svg>
