@@ -28,6 +28,10 @@ import FormatListNumberedIcon from "@mui/icons-material/FormatListNumbered";
 import CodeIcon from "@mui/icons-material/Code";
 import LinkIcon from "@mui/icons-material/Link";
 import FormatQuoteIcon from "@mui/icons-material/FormatQuote";
+import UndoIcon from "@mui/icons-material/Undo";
+import RedoIcon from "@mui/icons-material/Redo";
+import FormatIndentIncreaseIcon from "@mui/icons-material/FormatIndentIncrease";
+import FormatIndentDecreaseIcon from "@mui/icons-material/FormatIndentDecrease";
 import { useState } from "react";
 import { useUser } from "../../contexts/UserContext";
 import type { Editor } from "@tiptap/react";
@@ -259,6 +263,32 @@ export function EditorToolbar({
               flexWrap: "wrap",
             }}
           >
+            {/* Undo / Redo */}
+            <Tooltip title="Undo">
+              <span>
+                <IconButton
+                  size="small"
+                  onClick={() => editor.chain().focus().undo().run()}
+                  disabled={!editor.can().undo()}
+                >
+                  <UndoIcon fontSize="small" />
+                </IconButton>
+              </span>
+            </Tooltip>
+            <Tooltip title="Redo">
+              <span>
+                <IconButton
+                  size="small"
+                  onClick={() => editor.chain().focus().redo().run()}
+                  disabled={!editor.can().redo()}
+                >
+                  <RedoIcon fontSize="small" />
+                </IconButton>
+              </span>
+            </Tooltip>
+
+            <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
+
             {/* Text style */}
             <Tooltip title="Bold (Ctrl+B)">
               <IconButton
@@ -348,6 +378,32 @@ export function EditorToolbar({
               >
                 <FormatListNumberedIcon fontSize="small" />
               </IconButton>
+            </Tooltip>
+            <Tooltip title="Indent list item (Tab)">
+              <span>
+                <IconButton
+                  size="small"
+                  onClick={() =>
+                    editor.chain().focus().sinkListItem("listItem").run()
+                  }
+                  disabled={!editor.can().sinkListItem("listItem")}
+                >
+                  <FormatIndentIncreaseIcon fontSize="small" />
+                </IconButton>
+              </span>
+            </Tooltip>
+            <Tooltip title="Unindent list item (Shift+Tab)">
+              <span>
+                <IconButton
+                  size="small"
+                  onClick={() =>
+                    editor.chain().focus().liftListItem("listItem").run()
+                  }
+                  disabled={!editor.can().liftListItem("listItem")}
+                >
+                  <FormatIndentDecreaseIcon fontSize="small" />
+                </IconButton>
+              </span>
             </Tooltip>
             <Tooltip title="Blockquote">
               <IconButton

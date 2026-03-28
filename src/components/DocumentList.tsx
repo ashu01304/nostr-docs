@@ -2,6 +2,12 @@ import { useEffect, useState } from "react";
 import { alpha } from "@mui/material/styles";
 import { fetchAllDocuments } from "../nostr/fetchFile.ts";
 import {
+  loadAllLocalEvents,
+  storeLocalEvent,
+  markBroadcast,
+} from "../lib/localStore.ts";
+import { publishEvent } from "../nostr/publish.ts";
+import {
   Box,
   Typography,
   List,
@@ -84,14 +90,61 @@ export default function DocumentList({
         return;
       }
       setLoading(true);
+
+      // ── Phase 1: local-first hydration ──────────────────
+      // Load whatever is in IndexedDB before touching relays. This makes the
+      // sidebar populate instantly and works fully offline. Each addDocument
+      // call is awaited sequentially to avoid race conditions in the context
+      // state updater.
+      let localEntries: Awaited<ReturnType<typeof loadAllLocalEvents>> = [];
+      try {
+        localEntries = await loadAllLocalEvents();
+        for (const entry of localEntries) {
+          try {
+            await addDocument(entry.event, {
+              viewKey: entry.viewKey,
+              editKey: entry.editKey,
+            });
+          } catch {
+            // Skip events that can't be decrypted (e.g. belong to another user)
+          }
+        }
+      } catch (err) {
+        console.warn("Failed to load local events:", err);
+      }
+
+      // ── Phase 2: relay sync ──────────────────────────────
       try {
         const pubkey = await signer.getPublicKey();
         await fetchAllDocuments(
           relays,
-          (doc: Event) => addDocument(doc),
+          async (doc: Event) => {
+            await addDocument(doc);
+            // Cache relay-fetched events locally so both devices end up with
+            // each other's documents in IndexedDB after a sync.
+            const address = getEventAddress(doc);
+            if (address) {
+              storeLocalEvent({
+                address,
+                event: doc,
+                pendingBroadcast: false,
+                savedAt: Date.now(),
+              }).catch(() => {});
+            }
+          },
           pubkey,
         );
         await fetchDeleteRequests(relays, addDeletionRequest);
+
+        // ── Phase 3: re-broadcast any events saved while offline ──
+        // Fire-and-forget: don't block loading state on this.
+        for (const entry of localEntries) {
+          if (entry.pendingBroadcast) {
+            publishEvent(entry.event, relays)
+              .then(() => markBroadcast(entry.address))
+              .catch(() => {});
+          }
+        }
       } catch (err) {
         console.error("Failed to fetch documents:", err);
       } finally {

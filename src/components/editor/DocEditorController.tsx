@@ -23,6 +23,11 @@ import { signerManager } from "../../signer";
 import { useRelays } from "../../contexts/RelayContext";
 import { publishEvent } from "../../nostr/publish";
 import { makeTag } from "../../utils/makeTag";
+import {
+  storeLocalEvent,
+  markBroadcast,
+  removeLocalEvent,
+} from "../../lib/localStore";
 
 import { EditorToolbar } from "./EditorToolbar";
 import { DocEditorSurface } from "./DocEditorSurface";
@@ -34,6 +39,9 @@ import { encryptContent } from "../../utils/encryption";
 import { KIND_FILE } from "../../nostr/kinds";
 import { getLatestVersion } from "../../utils/helpers";
 import { encodeNKeys } from "../../utils/nkeys";
+
+// Delay after the last edit before auto-save fires (ms)
+const AUTO_SAVE_DELAY_MS = 30_000;
 
 type EditorMode = "edit" | "preview" | "split";
 
@@ -79,6 +87,8 @@ export function DocumentEditorController({
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(
     activeVersion ? new Date(activeVersion.event.created_at * 1000) : null,
   );
+  // Whether the last save was an auto-save (vs a manual save)
+  const [wasAutoSaved, setWasAutoSaved] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
   const [wordCount, setWordCount] = useState(0);
   const [charCount, setCharCount] = useState(0);
@@ -99,9 +109,14 @@ export function DocumentEditorController({
   const modeRef = useRef<EditorMode>(mode);
   // Track whether first-mount effect has run (skip re-setting content on init)
   const isFirstMount = useRef(true);
+  // Always-current flags read by the auto-save timer at fire time
+  const isDraftRef = useRef(isDraft);
+  const isViewOnlyRef = useRef(isViewOnly);
 
-  // Keep modeRef in sync every render (no effect needed, runs synchronously)
+  // Keep all synchronous refs current on every render
   modeRef.current = mode;
+  isDraftRef.current = isDraft;
+  isViewOnlyRef.current = isViewOnly;
 
   /* ── TipTap editor instance ────────────────────────────── */
   const editor = useEditor({
@@ -193,6 +208,25 @@ export function DocumentEditorController({
   // the navigation or blocker.reset() to stay on the page.
   const blocker = useBlocker(hasUnsavedChanges);
 
+  /* ── Auto-save: debounced 30s after last content change ── */
+  // Only fires for existing (non-draft) documents that the user can edit.
+  // The timer is reset on every md change, so it only fires 30s after the
+  // *last* keystroke. All conditions are re-checked at fire time via refs
+  // to avoid stale closure issues.
+  useEffect(() => {
+    // Don't even set the timer if there's nothing to save
+    if (md === lastSavedMdRef.current) return;
+
+    const timer = setTimeout(() => {
+      if (isDraftRef.current) return;      // never auto-create new documents
+      if (isViewOnlyRef.current) return;   // never save read-only views
+      if (!mdRef.current.trim()) return;   // don't save blank content
+      handleSaveRef.current(true);         // silent = true (no toast)
+    }, AUTO_SAVE_DELAY_MS);
+
+    return () => clearTimeout(timer);
+  }, [md]);
+
   /* ── Resync when active version changes (relay updates) ── */
   useEffect(() => {
     if (isFirstMount.current) {
@@ -269,8 +303,30 @@ export function DocumentEditorController({
       signed = await signer.signEvent(event);
     }
 
+    // 1. Update React state (in-memory, for immediate UI)
     addDocument(signed, { viewKey, editKey });
-    await publishEvent(signed, relays);
+
+    // 2. Persist locally first — this is the source of truth when offline.
+    //    Throws only if IndexedDB itself fails (rare), which will surface as
+    //    a save error to the user.
+    await storeLocalEvent({
+      address,
+      event: signed,
+      viewKey: viewKey ?? undefined,
+      editKey: editKey ?? undefined,
+      pendingBroadcast: true,
+      savedAt: Date.now(),
+    });
+
+    // 3. Broadcast to relays (best-effort — relay failure doesn't undo the
+    //    local save, so we don't throw; we just log and leave the event
+    //    marked pendingBroadcast=true for the next sync opportunity).
+    try {
+      await publishEvent(signed, relays);
+      await markBroadcast(address);
+    } catch (err) {
+      console.warn("Relay broadcast failed (saved locally):", err);
+    }
   };
 
   const saveNewDocument = async (content: string): Promise<string> => {
@@ -329,6 +385,7 @@ export function DocumentEditorController({
         await saveExistingDocument(selectedDocumentId!, mdToSave);
       }
       setLastSavedAt(new Date());
+      setWasAutoSaved(silent);
       if (!silent) {
         setToast({ open: true, message: "Saved", severity: "success" });
       }
@@ -346,19 +403,22 @@ export function DocumentEditorController({
   };
 
   // Keep the ref pointing at the latest handleSave so the keydown listener
-  // always calls the current version without going stale.
+  // and auto-save timer always call the current version without going stale.
   handleSaveRef.current = handleSave;
 
   const handleDelete = async (skipPrompt = false) => {
     if (isDraft) return;
 
+    const address = selectedDocumentId!;
+
     if (skipPrompt) {
       await deleteEvent({
-        address: selectedDocumentId!,
+        address,
         relays,
         reason: "User requested deletion",
       });
-      removeDocument(selectedDocumentId!);
+      removeDocument(address);
+      removeLocalEvent(address).catch(() => {});
       navigate("/");
       return;
     }
@@ -450,7 +510,8 @@ export function DocumentEditorController({
           </Typography>
         ) : lastSavedAt ? (
           <Typography variant="caption" color="text.secondary">
-            Saved {lastSavedAt.toLocaleTimeString()}
+            {wasAutoSaved ? "Auto-saved" : "Saved"}{" "}
+            {lastSavedAt.toLocaleTimeString()}
           </Typography>
         ) : null}
         <Typography variant="caption" color="text.secondary">
@@ -477,12 +538,14 @@ export function DocumentEditorController({
         cancelText="Cancel"
         onConfirm={async () => {
           setConfirmOpen(false);
+          const address = selectedDocumentId!;
           await deleteEvent({
-            address: selectedDocumentId!,
+            address,
             relays,
             reason: "User requested deletion",
           });
-          removeDocument(selectedDocumentId!);
+          removeDocument(address);
+          removeLocalEvent(address).catch(() => {});
           navigate("/");
         }}
         onCancel={() => setConfirmOpen(false)}

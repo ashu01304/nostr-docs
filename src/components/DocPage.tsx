@@ -6,6 +6,7 @@ import { useRelays } from "../contexts/RelayContext";
 import { nip19 } from "nostr-tools";
 import { decodeNKeys } from "../utils/nkeys";
 import { DocumentEditorController } from "./editor/DocEditorController";
+import { storeLocalEvent } from "../lib/localStore";
 
 export default function DocPage() {
   const { naddr } = useParams<{ naddr: string }>();
@@ -88,6 +89,18 @@ export default function DocPage() {
 
         await addDocument(latestEvent, keys);
         if (cancelled) return;
+
+        // Cache in IndexedDB so this device has it available offline
+        // and so the two-device sync works in both directions.
+        storeLocalEvent({
+          address: eventAddress,
+          event: latestEvent,
+          viewKey: keys.viewKey,
+          editKey: keys.editKey,
+          pendingBroadcast: false,
+          savedAt: Date.now(),
+        }).catch(() => {});
+
         setSelectedDocumentId(eventAddress);
       } catch (err) {
         console.error("Failed to fetch document:", err);
