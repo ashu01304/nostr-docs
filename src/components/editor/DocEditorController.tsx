@@ -22,6 +22,7 @@ import Placeholder from "@tiptap/extension-placeholder";
 import CharacterCount from "@tiptap/extension-character-count";
 
 import { useDocumentContext } from "../../contexts/DocumentContext";
+import { useUser } from "../../contexts/UserContext";
 import { useSharedPages } from "../../contexts/SharedDocsContext";
 import { signerManager } from "../../signer";
 import { useRelays } from "../../contexts/RelayContext";
@@ -136,8 +137,10 @@ export function DocumentEditorController({
   const isDraft = selectedDocumentId === null;
   const isMobile = useMediaQuery("(max-width:900px)");
   // viewKey present but no editKey = shared read-only link
-  const isViewOnly = !!viewKey && !editKey;
+  const { user } = useUser();
   const history = selectedDocumentId ? documents.get(selectedDocumentId) : null;
+  const isOwner = !!user?.pubkey && !!history?.versions[0]?.event.pubkey && user.pubkey === history.versions[0].event.pubkey;
+  const isViewOnly = !!viewKey && !editKey && !isOwner;
 
   const versions =
     history?.versions.map((v) => ({
@@ -244,7 +247,7 @@ export function DocumentEditorController({
   // Use a ref so the keydown listener always calls the latest handleSave
   // without needing to re-register on every render.
   const handleSaveRef = useRef<(silent?: boolean) => Promise<void>>(
-    async () => {},
+    async () => { },
   );
 
   useEffect(() => {
@@ -495,7 +498,7 @@ export function DocumentEditorController({
         eventIds: history?.versions.map((v) => v.event.id) ?? [],
       });
       removeDocument(address);
-      removeLocalEvent(address).catch(() => {});
+      removeLocalEvent(address).catch(() => { });
       navigate("/");
       return;
     }
@@ -627,7 +630,7 @@ export function DocumentEditorController({
             eventIds: history?.versions.map((v) => v.event.id) ?? [],
           });
           removeDocument(address);
-          removeLocalEvent(address).catch(() => {});
+          removeLocalEvent(address).catch(() => { });
           navigate("/");
         }}
         onCancel={() => setConfirmOpen(false)}
