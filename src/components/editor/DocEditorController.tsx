@@ -247,7 +247,7 @@ export function DocumentEditorController({
   // Use a ref so the keydown listener always calls the latest handleSave
   // without needing to re-register on every render.
   const handleSaveRef = useRef<(silent?: boolean) => Promise<void>>(
-    async () => { },
+    async () => {},
   );
 
   useEffect(() => {
@@ -498,7 +498,7 @@ export function DocumentEditorController({
         eventIds: history?.versions.map((v) => v.event.id) ?? [],
       });
       removeDocument(address);
-      removeLocalEvent(address).catch(() => { });
+      removeLocalEvent(address).catch(() => {});
       navigate("/");
       return;
     }
@@ -630,7 +630,7 @@ export function DocumentEditorController({
             eventIds: history?.versions.map((v) => v.event.id) ?? [],
           });
           removeDocument(address);
-          removeLocalEvent(address).catch(() => { });
+          removeLocalEvent(address).catch(() => {});
           navigate("/");
         }}
         onCancel={() => setConfirmOpen(false)}
