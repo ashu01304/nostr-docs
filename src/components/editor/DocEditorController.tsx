@@ -27,7 +27,7 @@ import { EncryptedFileNode } from "./extensions/EncryptedFileNode";
 import { useDocumentContext } from "../../contexts/DocumentContext";
 import { useUser } from "../../contexts/UserContext";
 import { useSharedPages } from "../../contexts/SharedDocsContext";
-import { signerManager } from "../../signer";
+import { signerManager } from "formstr-auth";
 import { useRelays } from "../../contexts/RelayContext";
 import { publishEvent } from "../../nostr/publish";
 import { makeTag } from "../../utils/makeTag";
@@ -452,7 +452,7 @@ export function DocumentEditorController({
       };
       signed = finalizeEvent(event, editKeyBytes);
     } else {
-      const signer = await signerManager.getSigner();
+      const signer = signerManager.getSigner();
       if (!signer) throw new Error("No signer available");
       const event = {
         kind: KIND_FILE,
@@ -495,7 +495,8 @@ export function DocumentEditorController({
     let pubkey: string;
     if (editKey) pubkey = getPublicKey(hexToBytes(editKey));
     else {
-      const signer = await signerManager.getSigner();
+      const signer = signerManager.getSigner();
+      if (!signer) throw new Error("No signer available");
       pubkey = await signer.getPublicKey();
     }
     const address = `${KIND_FILE}:${pubkey}:${dTag}`;

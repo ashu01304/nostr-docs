@@ -1,10 +1,6 @@
 // src/contexts/UserContext.tsx
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { signerManager } from "../signer";
-import { fetchProfile } from "../nostr/fetchProfile"; // function to fetch kind-0 metadata
-import { withTimeout } from "../utils/timeout";
-import { useRelays } from "./RelayContext";
-import LoginModal from "../components/LoginModal";
+import { signerManager, FormstrAuthModal } from "formstr-auth";
 
 export type UserProfile = {
   pubkey?: string;
@@ -15,122 +11,55 @@ export type UserProfile = {
 
 interface UserContextType {
   user: UserProfile | null;
-  loginModal: () => Promise<void>;
   logout: () => void;
-  refreshProfile: () => Promise<void>;
+  openLoginModal: () => void;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
-
-const LOCAL_STORAGE_KEY = "formstr:userProfile";
 
 export const UserProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
-  const [showLoginModal, setShowLoginModal] = useState<boolean>(false);
-  const [loginHandler, setLoginHandler] = useState<(() => void) | null>(null);
-  const [cancelHandler, setCancelHandler] = useState<(() => void) | null>(null);
-  const relays = useRelays();
-  // Load cached profile
-  useEffect(() => {
-    const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
-    if (stored) {
-      try {
-        setUser(JSON.parse(stored));
-      } catch (e) {
-        console.error("Failed to parse cached user profile:", e);
-      }
-    }
-  }, []);
+  const [loginOpen, setLoginOpen] = useState(false);
 
   useEffect(() => {
-    signerManager.registerLoginModal(() => {
-      return new Promise<void>((resolve, reject) => {
-        setShowLoginModal(true);
-
-        // Pass a function to LoginModal to call on successful login
-        const handleLoginSuccess = () => {
-          setShowLoginModal(false);
-          resolve(); // This finally unblocks getSigner
-        };
-
-        const handleLoginCancel = () => {
-          setShowLoginModal(false);
-          reject(new Error("Login cancelled by user"));
-        };
-
-        setLoginHandler(() => handleLoginSuccess);
-        setCancelHandler(() => handleLoginCancel);
-      });
-    });
-  }, []);
-
-  // Listen to signerManager changes
-  useEffect(() => {
-    signerManager.onChange(async () => {
-      console.log("On change triggered");
-      if (signerManager.hasSigner()) {
-        const signer = await signerManager.getSigner();
-        const pubkey = await signer.getPublicKey();
-        console.log("calling fetch and set");
-        fetchAndSetProfile(pubkey);
+    const updateProfile = () => {
+      const authUser = signerManager.getUser();
+      if (authUser) {
+        setUser({
+          pubkey: authUser.pubkey,
+          name: authUser.name,
+          avatar: authUser.picture,
+          about: authUser.about,
+        });
       } else {
         setUser(null);
-        localStorage.removeItem(LOCAL_STORAGE_KEY);
       }
-    });
+    };
 
-    // Restore signer on mount (triggers onChange)
-    signerManager.restoreFromStorage();
+    // Initialize signerManager and listen for changes
+    signerManager.init().then(updateProfile);
+    const unsubscribe = signerManager.onUserChange(updateProfile);
+
+    return () => unsubscribe();
   }, []);
-
-  // Fetch kind-0 metadata and update state + localStorage
-  const fetchAndSetProfile = async (pubkey: string) => {
-    loginHandler?.(); // resolve the login modal promise
-    try {
-      const profile = (await withTimeout(
-        fetchProfile(pubkey, relays.relays),
-        3000
-      )) as UserProfile;
-      const userProfile = { pubkey, ...profile };
-      setUser(userProfile);
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(userProfile));
-    } catch {
-      setUser({ pubkey });
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({ pubkey }));
-    }
-  };
-  const loginModal = async () => {
-    try {
-      const signer = await signerManager.getSigner(); // calls login modal if no signer
-      const pubkey = await signer.getPublicKey();
-      await fetchAndSetProfile(pubkey);
-    } catch (e) {
-      console.error("Login canceled or failed:", e);
-    }
-  };
 
   const logout = () => {
     signerManager.logout();
     setUser(null);
-    localStorage.removeItem(LOCAL_STORAGE_KEY);
   };
 
-  const refreshProfile = async () => {
-    if (!user?.pubkey) return;
-    await fetchAndSetProfile(user.pubkey);
-  };
+  const openLoginModal = () => setLoginOpen(true);
+  const closeLoginModal = () => setLoginOpen(false);
 
   return (
-    <UserContext.Provider value={{ user, loginModal, logout, refreshProfile }}>
+    <UserContext.Provider value={{ user, logout, openLoginModal }}>
       {children}
-      <LoginModal
-        open={showLoginModal}
-        onClose={() => {
-          cancelHandler?.();
-          setShowLoginModal(false);
-        }}
+      <FormstrAuthModal
+        open={loginOpen}
+        onClose={closeLoginModal}
+        onSuccess={closeLoginModal}
       />
     </UserContext.Provider>
   );

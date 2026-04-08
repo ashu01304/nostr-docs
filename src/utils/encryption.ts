@@ -1,6 +1,6 @@
 import { getPublicKey, nip44 } from "nostr-tools";
 import { hexToBytes } from "nostr-tools/utils";
-import { signerManager } from "../signer";
+import { signerManager } from "formstr-auth";
 
 export const encryptContent = async (
   content: string,
@@ -14,13 +14,13 @@ export const encryptContent = async (
     return nip44.encrypt(content, conversationKey);
   }
 
-  const signer = await signerManager.getSigner();
+  const signer = signerManager.getSigner();
   if (!signer) {
     throw new Error("No signer available for encryption");
   }
 
   const pubkey = await signer.getPublicKey();
-  const encrypted = await signer.nip44Encrypt!(pubkey, content);
+  const encrypted = await signer.nip44Encrypt?.(pubkey, content);
   if (!encrypted) {
     throw new Error("Encryption failed");
   }

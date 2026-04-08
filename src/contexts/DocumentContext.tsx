@@ -1,6 +1,6 @@
 import { getPublicKey, nip44, type Event } from "nostr-tools";
 import React, { createContext, useContext, useMemo, useState } from "react";
-import { signerManager } from "../signer";
+import { signerManager } from "formstr-auth";
 import { getConversationKey } from "nostr-tools/nip44";
 import { hexToBytes } from "nostr-tools/utils";
 import { useUser, type UserProfile } from "./UserContext";
@@ -59,10 +59,11 @@ const getDecryptedContent = async (
     }
 
     // After login (or if user was already set), get signer and decrypt
-    const signer = await signerManager.getSigner();
+    const signer = signerManager.getSigner();
+    if (!signer) return null;
     const pubkey = await signer.getPublicKey();
     if (event.pubkey !== pubkey) return null;
-    return await signer.nip44Decrypt!(pubkey, event.content);
+    return (await signer.nip44Decrypt?.(pubkey, event.content)) ?? null;
   } catch (err) {
     console.error("Failed to decrypt content:", err);
     return null;
@@ -72,7 +73,7 @@ const getDecryptedContent = async (
 export const DocumentProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
-  const { user, loginModal } = useUser();
+  const { user } = useUser();
   const [documents, setDocuments] = useState<Map<string, DocumentHistory>>(
     new Map(),
   );
@@ -126,7 +127,6 @@ export const DocumentProvider: React.FC<{ children: React.ReactNode }> = ({
       document,
       keys?.viewKey,
       user,
-      loginModal,
     );
     if (!decryptedContent) return;
 

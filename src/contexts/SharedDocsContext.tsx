@@ -8,7 +8,7 @@ import React, {
 import { fetchEventsByKind } from "../nostr/fetchFile";
 import { useRelays } from "./RelayContext";
 import { useUser } from "./UserContext";
-import { signerManager } from "../signer";
+import { signerManager } from "formstr-auth";
 import {
   getPublicKey,
   nip44,
@@ -148,7 +148,7 @@ export const SharedPagesProvider: React.FC<{ children: React.ReactNode }> = ({
   const refresh = async () => {
     setLoading(true);
     try {
-      const signer = await signerManager.getSigner();
+      const signer = signerManager.getSigner();
       if (!signer) return;
 
       const pubkey = await signer.getPublicKey();
@@ -170,7 +170,7 @@ export const SharedPagesProvider: React.FC<{ children: React.ReactNode }> = ({
       );
 
       // decrypt content
-      const decrypted = await signer.nip44Decrypt!(pubkey, latestEvent.content);
+      const decrypted = await signer.nip44Decrypt?.(pubkey, latestEvent.content);
 
       if (!decrypted) {
         setSharedDocs([]);
@@ -216,7 +216,7 @@ export const SharedPagesProvider: React.FC<{ children: React.ReactNode }> = ({
   const getSharedDocs = () => [...sharedDocs];
 
   const addSharedDoc = async (tag: string[]) => {
-    const signer = await signerManager.getSigner();
+    const signer = signerManager.getSigner();
     if (!signer) return;
 
     // add or update
@@ -229,7 +229,8 @@ export const SharedPagesProvider: React.FC<{ children: React.ReactNode }> = ({
 
     // encrypt
     const pubkey = await signer.getPublicKey();
-    const encrypted = await signer.nip44Encrypt!(pubkey, serialized);
+    const encrypted = await signer.nip44Encrypt?.(pubkey, serialized);
+    if (!encrypted) throw new Error("Encryption failed");
 
     // create event
     const event: EventTemplate = {

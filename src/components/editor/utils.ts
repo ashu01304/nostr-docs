@@ -8,7 +8,7 @@ import {
 } from "nostr-tools";
 import { getConversationKey } from "nostr-tools/nip44";
 import { bytesToHex, hexToBytes } from "nostr-tools/utils";
-import { signerManager } from "../../signer";
+import { signerManager } from "formstr-auth";
 import { publishEvent } from "../../nostr/publish";
 import { deleteEvent } from "../../nostr/deleteRequest";
 import { encodeNKeys } from "../../utils/nkeys";
@@ -64,7 +64,7 @@ export async function handleGeneratePrivateLink(
   }
   const { identifier: dTag } = parsed;
 
-  const signer = await signerManager.getSigner();
+  const signer = signerManager.getSigner();
 
   // 1️⃣ Generate keys
   const viewKeyUsed = viewKey ? hexToBytes(viewKey) : generateSecretKey();

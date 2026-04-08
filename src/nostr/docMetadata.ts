@@ -1,7 +1,7 @@
 import type { EventTemplate } from "nostr-tools";
 import { pool } from "./relayPool";
 import { publishEvent } from "./publish";
-import { signerManager } from "../signer";
+import { signerManager } from "formstr-auth";
 import { KIND_DOC_METADATA } from "./kinds";
 
 export interface DocMetadata {

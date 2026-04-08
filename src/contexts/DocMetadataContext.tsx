@@ -7,7 +7,7 @@ import React, {
 } from "react";
 import { useUser } from "./UserContext";
 import { useRelays } from "./RelayContext";
-import { signerManager } from "../signer";
+import { signerManager } from "formstr-auth";
 import { fetchAllDocMetadata, saveDocMetadata } from "../nostr/docMetadata";
 
 interface DocMetadataContextValue {
@@ -41,7 +41,7 @@ export const DocMetadataProvider: React.FC<{ children: React.ReactNode }> = ({
     (async () => {
       setLoading(true);
       try {
-        const signer = await signerManager.getSigner();
+        const signer = signerManager.getSigner();
         if (!signer) return;
         const pubkey = await signer.getPublicKey();
         const metadata = await fetchAllDocMetadata(relays, pubkey);

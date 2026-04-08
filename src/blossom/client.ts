@@ -1,7 +1,7 @@
-import { signerManager } from "../signer";
+import { signerManager } from "formstr-auth";
 
 async function buildAuthHeader(sha256: string, action: "upload" | "delete" = "upload"): Promise<string> {
-  const signer = await signerManager.getSigner();
+  const signer = signerManager.getSigner();
   if (!signer) throw new Error("No signer available");
 
   const expiration = Math.floor(Date.now() / 1000) + 60 * 60; // 1 hour

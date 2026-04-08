@@ -19,7 +19,6 @@ import LoginIcon from "@mui/icons-material/Login";
 import LogoutIcon from "@mui/icons-material/Logout";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
 import { useUser } from "../contexts/UserContext";
-import LoginModal from "./LoginModal";
 import BlossomServersModal from "./BlossomServersModal";
 import { themes } from "../theme";
 import type { ThemeId, ThemeDefinition } from "../theme";
@@ -30,9 +29,8 @@ type Props = {
 };
 
 export default function UserMenu({ themeId, onSelectTheme }: Props) {
-  const { user, logout } = useUser();
+  const { user, logout, openLoginModal } = useUser();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const [loginOpen, setLoginOpen] = useState(false);
   const [themeOpen, setThemeOpen] = useState(false);
   const [blossomOpen, setBlossomOpen] = useState(false);
 
@@ -162,7 +160,7 @@ export default function UserMenu({ themeId, onSelectTheme }: Props) {
         ) : (
           <MenuItem
             onClick={() => {
-              setLoginOpen(true);
+              openLoginModal();
               handleClose();
             }}
           >
@@ -174,7 +172,7 @@ export default function UserMenu({ themeId, onSelectTheme }: Props) {
         )}
       </Menu>
 
-      <LoginModal open={loginOpen} onClose={() => setLoginOpen(false)} />
+      {/* Modal is now handled by UserContext */}
       <BlossomServersModal open={blossomOpen} onClose={() => setBlossomOpen(false)} />
     </>
   );

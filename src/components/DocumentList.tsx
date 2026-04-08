@@ -24,7 +24,7 @@ import {
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import { useDocumentContext } from "../contexts/DocumentContext.tsx";
-import { signerManager } from "../signer/index.ts";
+import { signerManager } from "formstr-auth";
 import { useRelays } from "../contexts/RelayContext.tsx";
 import { nip19, type Event } from "nostr-tools";
 import { fetchDeleteRequests } from "../nostr/fetchDelete.ts";

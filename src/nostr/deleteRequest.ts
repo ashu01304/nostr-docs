@@ -1,4 +1,4 @@
-import { signerManager } from "../signer";
+import { signerManager } from "formstr-auth";
 import { publishEvent } from "../nostr/publish";
 
 /**
@@ -40,7 +40,7 @@ export async function deleteEvent({
     throw new Error(`Invalid address format: ${address}`);
   }
 
-  const signer = await signerManager.getSigner();
+  const signer = signerManager.getSigner();
   if (!signer) throw new Error("No signer available");
 
   const signerPubkey = await signer.getPublicKey!();

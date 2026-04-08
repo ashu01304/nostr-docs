@@ -77,7 +77,7 @@ export function EditorToolbar({
   onAttachFile,
   uploading,
 }: Props) {
-  const { user, loginModal } = useUser();
+  const { user, openLoginModal } = useUser();
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const [historyAnchor, setHistoryAnchor] = useState<null | HTMLElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -155,7 +155,7 @@ export function EditorToolbar({
               variant="contained"
               color="secondary"
               size="small"
-              onClick={() => loginModal()}
+              onClick={() => openLoginModal()}
               sx={{ fontWeight: 700, px: 2 }}
             >
               Login to Save
