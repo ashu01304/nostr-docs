@@ -17,6 +17,7 @@ import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import PaletteIcon from "@mui/icons-material/Palette";
 import LoginIcon from "@mui/icons-material/Login";
 import LogoutIcon from "@mui/icons-material/Logout";
+import BugReportIcon from "@mui/icons-material/BugReport";
 import { useUser } from "../contexts/UserContext";
 import LoginModal from "./LoginModal";
 import { themes } from "../theme";
@@ -132,6 +133,15 @@ export default function UserMenu({ themeId, onSelectTheme }: Props) {
             )}
           </Box>
         </Collapse>
+
+        <Divider />
+
+        <MenuItem onClick={() => window.open("https://formstr.app/i/formstr-bugs", "_blank")}>
+          <ListItemIcon>
+            <BugReportIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText primary="Report a Bug" />
+        </MenuItem>
 
         <Divider />
 
