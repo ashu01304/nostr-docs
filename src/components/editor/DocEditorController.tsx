@@ -171,6 +171,9 @@ export function DocumentEditorController({
   const [wordCount, setWordCount] = useState(0);
   const [charCount, setCharCount] = useState(0);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  // Address captured at delete-click time so the modal always deletes the right doc,
+  // even if selectedDocumentId in context changes before the user confirms.
+  const pendingDeleteAddressRef = useRef<string | null>(null);
   const [pendingVersionId, setPendingVersionId] = useState<string | null>(null);
   const [historyConfirmOpen, setHistoryConfirmOpen] = useState(false);
   const [toast, setToast] = useState<{
@@ -585,6 +588,10 @@ export function DocumentEditorController({
       return;
     }
 
+    // Capture the address and event IDs now, before the modal opens, so the
+    // confirm handler always deletes the document the user intended to delete
+    // (guarding against selectedDocumentId changing while the modal is open).
+    pendingDeleteAddressRef.current = address;
     setConfirmOpen(true);
   };
 
@@ -705,19 +712,30 @@ export function DocumentEditorController({
         confirmText="Delete"
         cancelText="Cancel"
         onConfirm={async () => {
+          // Use the address captured at delete-click time, not the live context value.
+          const address = pendingDeleteAddressRef.current ?? selectedDocumentId!;
+          pendingDeleteAddressRef.current = null;
           setConfirmOpen(false);
-          const address = selectedDocumentId!;
-          await deleteEvent({
-            address,
-            relays,
-            reason: "User requested deletion",
-            eventIds: history?.versions.map((v) => v.event.id) ?? [],
-          });
+          try {
+            await deleteEvent({
+              address,
+              relays,
+              reason: "User requested deletion",
+              eventIds: documents.get(address)?.versions.map((v) => v.event.id) ?? [],
+            });
+          } catch (err) {
+            console.error("Failed to publish deletion event:", err);
+            setToast({ open: true, message: "Failed to delete from relays", severity: "error" });
+            // Still remove locally so the document isn't stuck in a half-deleted state.
+          }
           removeDocument(address);
           removeLocalEvent(address).catch(() => {});
           navigate("/");
         }}
-        onCancel={() => setConfirmOpen(false)}
+        onCancel={() => {
+          pendingDeleteAddressRef.current = null;
+          setConfirmOpen(false);
+        }}
       />
       <ConfirmModal
         open={historyConfirmOpen}
