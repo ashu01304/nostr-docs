@@ -91,6 +91,11 @@ export default function ShareModal({ open, onClose, onPrivateLink }: Props) {
               />
               <Typography color="text.secondary">Can edit</Typography>
             </Box>
+            {canEdit && (
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: "block" }}>
+                Creates a separate shared copy. Anyone with the link can edit it — your original document is unaffected.
+              </Typography>
+            )}
 
             <Button
               variant="contained"

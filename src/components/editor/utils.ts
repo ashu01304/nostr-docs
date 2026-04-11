@@ -10,7 +10,6 @@ import { getConversationKey } from "nostr-tools/nip44";
 import { bytesToHex, hexToBytes } from "nostr-tools/utils";
 import { signerManager } from "../../signer";
 import { publishEvent } from "../../nostr/publish";
-import { deleteEvent } from "../../nostr/deleteRequest";
 import { encodeNKeys } from "../../utils/nkeys";
 import { KIND_FILE } from "../../nostr/kinds";
 
@@ -99,25 +98,16 @@ export async function handleGeneratePrivateLink(
     signedEvent = await signer.signEvent(sharedEvent);
   }
 
-  // 4️⃣ Publish the new shared event first
+  // 4️⃣ Publish the new shared event
   await publishEvent(signedEvent, relays);
 
-  // 5️⃣ If sharing with edit permissions, delete the original after successful publish
-  if (editKeyUsed) {
-    await deleteEvent({
-      address: selectedDocumentId,
-      relays,
-      reason: "Document transferred to new owner",
-    });
-  }
-
-  // 6️⃣ Encode keys in one nkeys string
+  // 5️⃣ Encode keys in one nkeys string
   const nkeysStr = encodeNKeys({
     viewKey: bytesToHex(viewKeyUsed),
     ...(editKeyUsed && { editKey: bytesToHex(editKeyUsed) }),
   });
 
-  // 7️⃣ Build URL and address
+  // 6️⃣ Build URL and address
   const newAddress = `${KIND_FILE}:${signedEvent.pubkey}:${dTag}`;
   const naddr = nip19.naddrEncode({
     kind: KIND_FILE,

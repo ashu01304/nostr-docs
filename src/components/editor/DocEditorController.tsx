@@ -8,7 +8,9 @@ import {
   Typography,
   Chip,
   InputBase,
+  CircularProgress,
 } from "@mui/material";
+import InsertDriveFileIcon from "@mui/icons-material/InsertDriveFile";
 import LabelOutlinedIcon from "@mui/icons-material/LabelOutlined";
 import { useDocMetadata } from "../../contexts/DocMetadataContext";
 import { useNavigate, useBlocker } from "react-router-dom";
@@ -20,8 +22,10 @@ import { Markdown } from "tiptap-markdown";
 import Link from "@tiptap/extension-link";
 import Placeholder from "@tiptap/extension-placeholder";
 import CharacterCount from "@tiptap/extension-character-count";
+import { EncryptedFileNode } from "./extensions/EncryptedFileNode";
 
 import { useDocumentContext } from "../../contexts/DocumentContext";
+import { useUser } from "../../contexts/UserContext";
 import { useSharedPages } from "../../contexts/SharedDocsContext";
 import { signerManager } from "../../signer";
 import { useRelays } from "../../contexts/RelayContext";
@@ -31,6 +35,7 @@ import {
   storeLocalEvent,
   markBroadcast,
   removeLocalEvent,
+  trashLocalEvent,
 } from "../../lib/localStore";
 
 import { EditorToolbar } from "./EditorToolbar";
@@ -40,6 +45,9 @@ import ConfirmModal from "../common/ConfirmModal";
 import ShareModal from "../ShareModal";
 import { handleGeneratePrivateLink, handleSharePublic } from "./utils";
 import { encryptContent } from "../../utils/encryption";
+import { encryptFile } from "../../utils/fileEncryption";
+import { uploadToBlossom } from "../../blossom/client";
+import { useBlossomServers } from "../../contexts/BlossomContext";
 import { KIND_FILE } from "../../nostr/kinds";
 import { getLatestVersion } from "../../utils/helpers";
 import { encodeNKeys } from "../../utils/nkeys";
@@ -136,8 +144,10 @@ export function DocumentEditorController({
   const isDraft = selectedDocumentId === null;
   const isMobile = useMediaQuery("(max-width:900px)");
   // viewKey present but no editKey = shared read-only link
-  const isViewOnly = !!viewKey && !editKey;
+  const { user } = useUser();
   const history = selectedDocumentId ? documents.get(selectedDocumentId) : null;
+  const isOwner = !!user?.pubkey && !!history?.versions[0]?.event.pubkey && user.pubkey === history.versions[0].event.pubkey;
+  const isViewOnly = !!viewKey && !editKey && !isOwner;
 
   const versions =
     history?.versions.map((v) => ({
@@ -162,6 +172,9 @@ export function DocumentEditorController({
   const [wordCount, setWordCount] = useState(0);
   const [charCount, setCharCount] = useState(0);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  // Address captured at delete-click time so the modal always deletes the right doc,
+  // even if selectedDocumentId in context changes before the user confirms.
+  const pendingDeleteAddressRef = useRef<string | null>(null);
   const [pendingVersionId, setPendingVersionId] = useState<string | null>(null);
   const [historyConfirmOpen, setHistoryConfirmOpen] = useState(false);
   const [toast, setToast] = useState<{
@@ -170,6 +183,13 @@ export function DocumentEditorController({
     severity: "success" | "error";
   }>({ open: false, message: "", severity: "success" });
   const [shareOpen, setShareOpen] = useState(false);
+
+  const { servers: blossomServers } = useBlossomServers();
+
+  // Each in-flight upload gets a unique entry so multiple concurrent uploads
+  // are all visible and the button stays disabled until all finish.
+  const [uploadQueue, setUploadQueue] = useState<{ id: string; filename: string }[]>([]);
+  const uploading = uploadQueue.length > 0;
 
   const lastSavedMdRef = useRef<string>(initialContent);
   // Always-current markdown — avoids stale closures in effects/save
@@ -187,19 +207,38 @@ export function DocumentEditorController({
   isDraftRef.current = isDraft;
   isViewOnlyRef.current = isViewOnly;
 
+  // Always-current upload function — avoids stale closures in editorProps handlers
+  const uploadFileRef = useRef<(file: File) => Promise<void>>(async () => {});
+
   /* ── TipTap editor instance ────────────────────────────── */
   const editor = useEditor({
     extensions: [
       StarterKit,
-      Markdown.configure({ html: false, tightLists: true }),
+      // html: true so <encrypted-file> tags round-trip through markdown storage
+      Markdown.configure({ html: true, tightLists: true }),
       Link.configure({ openOnClick: false }),
       Placeholder.configure({
         placeholder: "Start writing your page here…",
       }),
       CharacterCount,
+      EncryptedFileNode,
     ],
     editorProps: {
       attributes: { class: "tiptap" },
+      handlePaste(_view, event) {
+        if (isViewOnlyRef.current) return false;
+        const files = event.clipboardData?.files;
+        if (!files?.length) return false;
+        Array.from(files).forEach((f) => uploadFileRef.current(f));
+        return true;
+      },
+      handleDrop(_view, event, _slice, moved) {
+        if (moved || isViewOnlyRef.current) return false;
+        const files = (event as DragEvent).dataTransfer?.files;
+        if (!files?.length) return false;
+        Array.from(files).forEach((f) => uploadFileRef.current(f));
+        return true;
+      },
     },
     content: initialContent,
     editable: mode !== "preview",
@@ -347,6 +386,56 @@ export function DocumentEditorController({
     setHistoryConfirmOpen(false);
     setPendingVersionId(null);
   };
+
+  /* ── File upload ───────────────────────────────────────── */
+
+  const handleFileUpload = async (file: File) => {
+    if (!editor) return;
+
+    if (blossomServers.length === 0) {
+      setToast({ open: true, message: "No blossom servers configured", severity: "error" });
+      return;
+    }
+
+    const uploadId = Math.random().toString(36).slice(2);
+    setUploadQueue((q) => [...q, { id: uploadId, filename: file.name }]);
+
+    try {
+      const { encryptedData, decryptionKey, decryptionNonce, x } =
+        await encryptFile(file);
+      const url = await uploadToBlossom(blossomServers, encryptedData, x);
+
+      // Move cursor to end of current selection first — prevents replacing a
+      // selected file node when the user uploads another while one is selected.
+      const insertPos = editor.state.selection.to;
+      editor.chain()
+        .setTextSelection(insertPos)
+        .insertContent({
+          type: "encryptedFile",
+          attrs: {
+            src: url,
+            decryptionKey,
+            decryptionNonce,
+            mimeType: file.type || "application/octet-stream",
+            filename: file.name,
+            x,
+          },
+        })
+        .run();
+    } catch (err) {
+      console.error("File upload failed:", err);
+      setToast({
+        open: true,
+        message: `Upload failed: ${err instanceof Error ? err.message : String(err)}`,
+        severity: "error",
+      });
+    } finally {
+      setUploadQueue((q) => q.filter((item) => item.id !== uploadId));
+    }
+  };
+
+  // Keep ref current so paste/drop handlers always call the latest version
+  uploadFileRef.current = handleFileUpload;
 
   /* ── Save helpers ──────────────────────────────────────── */
 
@@ -500,6 +589,10 @@ export function DocumentEditorController({
       return;
     }
 
+    // Capture the address and event IDs now, before the modal opens, so the
+    // confirm handler always deletes the document the user intended to delete
+    // (guarding against selectedDocumentId changing while the modal is open).
+    pendingDeleteAddressRef.current = address;
     setConfirmOpen(true);
   };
 
@@ -543,6 +636,8 @@ export function DocumentEditorController({
           focusMode={focusMode}
           onToggleFocusMode={() => setFocusMode((f) => !f)}
           isViewOnly={isViewOnly}
+          onAttachFile={(files) => Array.from(files).forEach(handleFileUpload)}
+          uploading={uploading}
         />
       )}
 
@@ -618,19 +713,30 @@ export function DocumentEditorController({
         confirmText="Delete"
         cancelText="Cancel"
         onConfirm={async () => {
+          // Use the address captured at delete-click time, not the live context value.
+          const address = pendingDeleteAddressRef.current ?? selectedDocumentId!;
+          pendingDeleteAddressRef.current = null;
           setConfirmOpen(false);
-          const address = selectedDocumentId!;
-          await deleteEvent({
-            address,
-            relays,
-            reason: "User requested deletion",
-            eventIds: history?.versions.map((v) => v.event.id) ?? [],
-          });
+          try {
+            await deleteEvent({
+              address,
+              relays,
+              reason: "User requested deletion",
+              eventIds: documents.get(address)?.versions.map((v) => v.event.id) ?? [],
+            });
+          } catch (err) {
+            console.error("Failed to publish deletion event:", err);
+            setToast({ open: true, message: "Failed to delete from relays", severity: "error" });
+            // Still remove locally so the document isn't stuck in a half-deleted state.
+          }
           removeDocument(address);
-          removeLocalEvent(address).catch(() => {});
+          await trashLocalEvent(address).catch(() => {});
           navigate("/");
         }}
-        onCancel={() => setConfirmOpen(false)}
+        onCancel={() => {
+          pendingDeleteAddressRef.current = null;
+          setConfirmOpen(false);
+        }}
       />
       <ConfirmModal
         open={historyConfirmOpen}
@@ -654,6 +760,39 @@ export function DocumentEditorController({
         onConfirm={() => blocker.proceed?.()}
         onCancel={() => blocker.reset?.()}
       />
+      {/* ── Upload queue ─────────────────────────────────── */}
+      {uploadQueue.length > 0 && (
+        <Paper
+          elevation={4}
+          sx={{
+            position: "fixed",
+            bottom: 24,
+            right: 24,
+            zIndex: 1400,
+            p: 1.5,
+            minWidth: 220,
+            maxWidth: 300,
+            borderRadius: 2,
+            display: "flex",
+            flexDirection: "column",
+            gap: 0.75,
+          }}
+        >
+          <Typography variant="caption" fontWeight={600} color="text.secondary">
+            Uploading {uploadQueue.length} file{uploadQueue.length > 1 ? "s" : ""}…
+          </Typography>
+          {uploadQueue.map((item) => (
+            <Box key={item.id} sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              <CircularProgress size={14} thickness={5} />
+              <InsertDriveFileIcon sx={{ fontSize: 14, opacity: 0.5 }} />
+              <Typography variant="caption" noWrap sx={{ flex: 1 }}>
+                {item.filename}
+              </Typography>
+            </Box>
+          ))}
+        </Paper>
+      )}
+
       <ShareModal
         open={shareOpen}
         onClose={() => setShareOpen(false)}

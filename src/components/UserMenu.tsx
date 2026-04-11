@@ -18,8 +18,10 @@ import PaletteIcon from "@mui/icons-material/Palette";
 import LoginIcon from "@mui/icons-material/Login";
 import LogoutIcon from "@mui/icons-material/Logout";
 import BugReportIcon from "@mui/icons-material/BugReport";
+import CloudUploadIcon from "@mui/icons-material/CloudUpload";
 import { useUser } from "../contexts/UserContext";
 import LoginModal from "./LoginModal";
+import BlossomServersModal from "./BlossomServersModal";
 import { themes } from "../theme";
 import type { ThemeId, ThemeDefinition } from "../theme";
 
@@ -33,6 +35,7 @@ export default function UserMenu({ themeId, onSelectTheme }: Props) {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [loginOpen, setLoginOpen] = useState(false);
   const [themeOpen, setThemeOpen] = useState(false);
+  const [blossomOpen, setBlossomOpen] = useState(false);
 
   const handleOpen = (e: React.MouseEvent<HTMLElement>) =>
     setAnchorEl(e.currentTarget);
@@ -134,6 +137,14 @@ export default function UserMenu({ themeId, onSelectTheme }: Props) {
           </Box>
         </Collapse>
 
+        {/* Blossom servers */}
+        <MenuItem onClick={() => { setBlossomOpen(true); handleClose(); }}>
+          <ListItemIcon>
+            <CloudUploadIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText primary="Blossom Servers" secondary="File upload servers" secondaryTypographyProps={{ variant: "caption" }} />
+        </MenuItem>
+
         <Divider />
 
         <MenuItem onClick={() => window.open("https://formstr.app/i/formstr-bugs", "_blank")}>
@@ -174,6 +185,7 @@ export default function UserMenu({ themeId, onSelectTheme }: Props) {
       </Menu>
 
       <LoginModal open={loginOpen} onClose={() => setLoginOpen(false)} />
+      <BlossomServersModal open={blossomOpen} onClose={() => setBlossomOpen(false)} />
     </>
   );
 }
